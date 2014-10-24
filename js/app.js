@@ -33,12 +33,16 @@ window.addEventListener('DOMContentLoaded', function() {
 
     for(var addr in devices) {
       var item = document.createElement('li');
-      var dt = Math.floor((now - devices[addr]) * MS_TO_S);
+      var dt = Math.floor((now - devices[addr].lastSeen) * MS_TO_S);
       var str;
       if(dt > 10)  {
         str = '<del>' + addr + '</del>';
       } else {
         str = addr;
+        if(null !== devices[addr].latency) {
+          var latency = Math.floor(devices[addr].latency);
+          str += ' (' + latency + ' ms)';
+        }
       }
 
       item.innerHTML = str;
@@ -49,25 +53,32 @@ window.addEventListener('DOMContentLoaded', function() {
   function receiveMessage(msg) {
     var data = JSON.parse(String.fromCharCode.apply(null, new Uint8Array(msg.data)));
 
-    if(!devices.hasOwnProperty(msg.remoteAddress)) {
+    if(!devices.hasOwnProperty(msg.remoteAddress) || devices[msg.remoteAddress].id !== data.id) {
       devices[msg.remoteAddress] = {
+        id: data.id,
         lastSeen: null,
-        latency: null
+        latency: null,
+        piseq: 0,
+        poseq: 0,
       };
     }
-    devices[msg.remoteAddress] = Date.now();
+
+    devices[msg.remoteAddress].lastSeen = Date.now();
     updateDeviceList();
 
-    if('PING' == data.type) {
+    if('PING' == data.type && devices[msg.remoteAddress].piseq < data.seq) {
+      devices[msg.remoteAddress].piseq = data.seq;
       data.type = 'PONG';
+      data.id = message.id;
       try {
         socket.send(JSON.stringify(data), msg.remoteAddress, BEACON_PORT);
       } catch (e) {
         console.error(e.message, e.stack);
         stopBeacon(e.message);
       }
-    } else {
-
+    } else if('PONG' == data.type && devices[msg.remoteAddress].poseq < data.seq) {
+      devices[msg.remoteAddress].poseq = data.seq;
+      devices[msg.remoteAddress].latency = (Date.now() - data.time)/2;
     }
   }
 
@@ -93,6 +104,7 @@ window.addEventListener('DOMContentLoaded', function() {
     console.log("start beacon");
     button.disabled = true;
     button.removeEventListener('click', startBeacon);
+    errtxt.textContent = '';
 
     try {
       socket = new UDPSocket({loopback: false, localPort: BEACON_PORT});
@@ -136,7 +148,7 @@ window.addEventListener('DOMContentLoaded', function() {
     message = null;
     updateDeviceList();
 
-    if(err) {
+    if(typeof err == 'string') {
       errtxt.textContent = err;
     }
 
