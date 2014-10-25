@@ -12,6 +12,7 @@ window.addEventListener('DOMContentLoaded', function() {
 
   var button = document.getElementById('scan-button');
   var errtxt = document.getElementById('message');
+  var address = document.getElementById('address');
 
   var MS_TO_S = 1/1000;
   var BEACON_PING = 'PING';
@@ -52,6 +53,11 @@ window.addEventListener('DOMContentLoaded', function() {
 
   function receiveMessage(msg) {
     var data = JSON.parse(String.fromCharCode.apply(null, new Uint8Array(msg.data)));
+
+    if(data.id == message.id) {
+      address.textContent = msg.remoteAddress;
+      return;
+    }
 
     if(!devices.hasOwnProperty(msg.remoteAddress) || devices[msg.remoteAddress].id !== data.id) {
       devices[msg.remoteAddress] = {
@@ -107,7 +113,7 @@ window.addEventListener('DOMContentLoaded', function() {
     errtxt.textContent = '';
 
     try {
-      socket = new UDPSocket({loopback: false, localPort: BEACON_PORT});
+      socket = new UDPSocket({loopback: true, localPort: BEACON_PORT});
     } catch(e) {
       console.error(e.message, e.stack);
       socket = null;
@@ -137,6 +143,7 @@ window.addEventListener('DOMContentLoaded', function() {
     console.log("stop beacon");
     button.disabled = true;
     button.removeEventListener('click', stopBeacon);
+    address.textContent = '';
 
     if(socket) {
       socket.removeEventListener('message', receiveMessage);
